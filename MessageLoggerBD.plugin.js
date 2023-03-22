@@ -1,7 +1,7 @@
 /**
  * @name MessageLogger
  * @author Clementine
- * @version 1.0.6
+ * @version 1.0.7
  * @description Logs all messages in a channel and saves them to a file when deleted.
  * @website https://github.com/LuciCMD/MessageLogger
  * @source https://github.com/LuciCMD/MessageLogger/blob/main/MessageLogger.plugin.js
@@ -57,7 +57,7 @@ module.exports = (_ => {
 
     const fs = require("fs");
     const path = require("path");
-    const configFile = path.join(BdApi.Plugins.folder, "MessageLogger.config.json");
+    const configFile = path.join(BdApi.Plugins.folder, "MessageLogs/MessageLogger.config.json");
 
     return class MessageLogger extends Plugin {
       onLoad() {
@@ -70,6 +70,7 @@ module.exports = (_ => {
       }
 
       onStart() {
+        console.log("onStart called");
         this.selectedGuilds = {};
         if (fs.existsSync(configFile)) {
           try {
@@ -102,6 +103,7 @@ module.exports = (_ => {
             if (BDFDB.ObjectUtils.is(action) && action.type == "MESSAGE_DELETE" && action.id) {
               let deletedMessage = this.messageCache.get(action.id);
               if (deletedMessage) {
+                console.log(`Retrieved deleted message ${deletedMessage.id} from cache`);
                 let channel = BDFDB.LibraryStores.ChannelStore.getChannel(deletedMessage.channel_id);
                 let guildId = channel && channel.guild_id ? channel.guild_id : deletedMessage.channel_id;
 
@@ -116,6 +118,8 @@ module.exports = (_ => {
                 const modifiedMessage = { ...deletedMessage, content: messageContent };
                 this.saveMessageToFile(guildId, modifiedMessage, recipientId);
                 this.messageCache.delete(action.id);
+              } else {
+                console.log(`Failed to retrieve deleted message ${action.id} from cache`);
               }
             }
 
@@ -139,13 +143,7 @@ module.exports = (_ => {
                   content: message.content,
                   edited_timestamp: message.edited_timestamp
                 });
-/*
-                // Fetch and cache recent messages in selected server channels
-                this.fetchAndCacheRecentMessagesInSelectedGuilds();
 
-                // Fetch and cache recent messages in DMs
-                this.fetchAndCacheDMs();
-*/
                 this.saveEditedMessageToFile(guildId, message, recipientId, originalMessage);
                 this.messageCache.set(message.id, originalMessage); // Update the message cache with the latest edit
               }
@@ -157,51 +155,6 @@ module.exports = (_ => {
       onStop() {
         // Code that runs when the plugin is stopped
       }
-      
-/*
-      async fetchAndCacheRecentMessages(channelId, fetchLimit) {
-        try {
-          // Wait for 2 seconds (2000 milliseconds) before making a request
-          await new Promise(resolve => setTimeout(resolve, 2000));
-
-          const response = await BDFDB.LibraryModules.MessageAPI.fetchMessages(channelId, { limit: fetchLimit });
-          const messages = response.messages;
-          for (const message of messages) {
-            message.edit_history = [];
-            this.messageCache.set(message.id, message);
-          }
-        } catch (error) {
-          console.error(`Failed to fetch messages for channel ${channelId}:`, error);
-        }
-      }
-
-      async fetchAndCacheRecentMessagesInSelectedGuilds() {
-        const fetchLimit = 50; // Fetch up to 50 recent messages
-      
-        for (const guildId in this.selectedGuilds) {
-          const channels = BDFDB.LibraryStores.ChannelStore.getChannels(guildId);
-          for (const channelId in channels) {
-            const channel = channels[channelId];
-            if (channel.type === 0) { // Check if it's a text channel
-              await this.fetchAndCacheRecentMessages(channel.id, fetchLimit);
-              await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds (2000 milliseconds) before fetching the next channel
-            }
-          }
-        }
-      }
-      
-      async fetchAndCacheDMs() {
-        const privateChannels = BDFDB.LibraryStores.PrivateChannelStore.getPrivateChannels();
-        const fetchLimit = 50; // Fetch up to 50 recent messages
-      
-        for (const privateChannel of Object.values(privateChannels)) {
-          if (privateChannel.isDM()) {
-            await this.fetchAndCacheRecentMessages(privateChannel.id, fetchLimit);
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for 2 seconds (2000 milliseconds) before fetching the next DM
-          }
-        }
-      }
-*/
 
       saveMessageToFile(guildId, message, recipient = null) {
         const fs = require("fs");
