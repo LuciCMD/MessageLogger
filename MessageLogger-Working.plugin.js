@@ -1,7 +1,7 @@
 /**
  * @name MessageLogger
  * @author Clementine
- * @version 1.0.7
+ * @version 1.2.0
  * @description Logs all messages in a channel and saves them to a file when deleted.
  * @website https://github.com/LuciCMD/MessageLogger
  * @source https://github.com/LuciCMD/MessageLogger/blob/main/MessageLogger.plugin.js
@@ -96,6 +96,14 @@ module.exports = (_ => {
                 // Initialize edit_history for the message
                 message.edit_history = [];
                 this.messageCache.set(message.id, message);
+
+                // Fetch the channel object from the ChannelStore
+                const channel = BDFDB.LibraryStores.ChannelStore.getChannel(channelId);
+
+                // Save attachments if there are any
+                if (message.attachments && message.attachments.length > 0) {
+                  this.saveAttachmentToFile(channel.guild_id, message);
+                }
               }
             }
 
@@ -180,7 +188,8 @@ module.exports = (_ => {
           // Use [DM] tag for DMs with the recipient's username and guild name tag for guilds
           const tag = isDM && recipientUser ? `[DM: ${recipientUser.username}#${recipientUser.discriminator}]` : `[${serverName}]`;
 
-          const logMessage = `[${new Date(message.timestamp).toISOString()}] ${tag} ${message.author.username}#${message.author.discriminator}: ${message.content}\n`;
+          const attachmentFileNames = message.attachments.map(attachment => attachment.filename).join(", ");
+          const logMessage = `[${new Date(message.timestamp).toISOString()}] ${tag} ${message.author.username}#${message.author.discriminator}: ${message.content || `"${attachmentFileNames}"`}\n`;
 
           fs.readFile(logFilePath, 'utf8', (err, data) => {
             if (err && err.code === 'ENOENT') {
@@ -254,6 +263,43 @@ module.exports = (_ => {
               console.error(`Failed to read the file: ${err}`);
             }
           });
+        }
+      }
+
+      async saveAttachmentToFile(guildId, message, recipient = null) {
+        const fs = require("fs");
+        const path = require("path");
+        const attachmentDirectory = path.join(this.logDirectory, "Attachments");
+
+        if (!fs.existsSync(attachmentDirectory)) {
+          fs.mkdirSync(attachmentDirectory);
+        }
+
+        const channel = BDFDB.LibraryStores.ChannelStore.getChannel(message.channel_id);
+        const isDM = channel && channel.isDM();
+        const isSelectedServer = this.selectedGuilds[guildId] === true;
+
+        if (isDM || isSelectedServer) {
+          for (const attachment of message.attachments) {
+            const url = attachment.url;
+            const filename = attachment.filename;
+            const filePath = path.join(attachmentDirectory, filename);
+
+            try {
+              const response = await fetch(url);
+              if (!response.ok) {
+                throw new Error(`HTTP error: ${response.statusText}`);
+              }
+              const buffer = await response.arrayBuffer();
+              const uint8Array = new Uint8Array(buffer);
+              const data = new Uint8Array(uint8Array).reduce((data, byte) => data + String.fromCharCode(byte), '');
+
+              fs.writeFileSync(filePath, data, 'binary');
+              console.log(`Attachment saved: ${filePath}`);
+            } catch (error) {
+              console.error(`Failed to save attachment: ${error.message}`);
+            }
+          }
         }
       }
 
